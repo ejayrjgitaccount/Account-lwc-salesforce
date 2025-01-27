@@ -1,0 +1,62 @@
+// apex class
+public with sharing class AccountMapController {
+    @AuraEnabled(cacheable=true)
+    public static List<Account> getAccounts() {
+        return [SELECT Id, Name, BillingStreet, BillingCity, BillingState, BillingPostalCode, BillingCountry, BillingLatitude, BillingLongitude FROM Account WHERE BillingLatitude != NULL AND BillingLongitude != NULL];
+    }
+}
+
+// lighting web compounds
+// HTML
+
+<template>
+    <lightning-card title="Account Locations" icon-name="standard:account">
+        <lightning-map map-markers={mapMarkers} zoom-level="2" center="USA"></lightning-map>
+    </lightning-card>
+</template>
+
+//Javascript
+
+import { LightningElement, wire } from 'lwc';
+import getAccounts from '@salesforce/apex/AccountMapController.getAccounts';
+
+export default class AccountMap extends LightningElement {
+    mapMarkers = [];
+    error;
+
+    @wire(getAccounts)
+    wiredAccounts({ error, data }) {
+        if (data) {
+            this.mapMarkers = data.map(account => {
+                const { Name, BillingStreet, BillingCity, BillingState, BillingPostalCode, BillingCountry, BillingLatitude, BillingLongitude } = account;
+                return {
+                    location: {
+                        Latitude: BillingLatitude,
+                        Longitude: BillingLongitude
+                    },
+                    title: Name,
+                    description: `${BillingStreet}, ${BillingCity}, ${BillingState} ${BillingPostalCode}, ${BillingCountry}`
+                };
+            });
+            this.error = undefined;
+        } else if (error) {
+            this.error = error;
+            this.mapMarkers = [];
+        }
+    }
+}
+
+//Metadata Configuration File
+
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata" fqn="accountMap">
+    <apiVersion>58.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__RecordPage</target>
+        <target>lightning__AppPage</target>
+        <target>lightning__HomePage</target>
+    </targets>
+</LightningComponentBundle>
+
+
