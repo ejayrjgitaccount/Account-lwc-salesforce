@@ -1,0 +1,127 @@
+//HTML
+
+<template>
+    <lightning-card title="Different Businesses Locations">
+        <!-- Industry Selection Section -->
+        <div class="slds-grid slds-wrap slds-p-around_medium slds-border_bottom">
+            <!-- Dropdown for Industry Selection -->
+            <div class="slds-col slds-size_1-of-2 slds-p-around_small">
+                <lightning-combobox 
+                    label="Select Industry" 
+                    value={industryName} 
+                    placeholder="Select Business" 
+                    options={industryOptions} 
+                    onchange={handleIndustryChange}>
+                </lightning-combobox>
+            </div>
+            <div class="slds-col slds-size_1-of-2 slds-p-around_small slds-text-align_right">
+                <lightning-button variant="brand-outline" label="Add" onclick={addIndustry}></lightning-button>
+                <lightning-button variant="destructive-text" label="Remove" onclick={removeIndustry}></lightning-button>
+            </div>
+        </div>
+
+        <!-- Display Selected Industries -->
+        <div class="slds-m-around_medium">
+            <p>Selected Businesses:</p>
+            <template if:true={selectedIndustries.length}>
+                <template for:each={selectedIndustries} for:item="industry">
+                    <lightning-badge label={industry} key={industry}></lightning-badge>
+                </template>
+            </template>
+        </div>
+
+        <!-- Map Section -->
+        <div class="map-container slds-p-around_medium">
+            <lightning-map map-markers={mapMarkers} markers-title="Our Branch Locations" zoom-level="3"></lightning-map>
+        </div>
+    </lightning-card>
+</template>
+
+//JAVASCRIPT
+
+import { LightningElement, track, wire } from 'lwc';
+import getCompanyLocations from '@salesforce/apex/GoogleMapController.getCompanyLocations';
+import getIndustries from '@salesforce/apex/GoogleMapController.getIndustries'; // Import the method to fetch industries
+
+export default class MapCompounds extends LightningElement {
+    @track industryName = '';
+    @track selectedIndustries = []; // Default selected industry
+    @track mapMarkers = [];
+    @track industryOptions = []; // List of industries for the combobox
+    @track error;
+
+    // Fetch industries from the server and populate the combobox options
+    @wire(getIndustries)
+    wiredIndustries({ error, data }) {
+        if (data) {
+            this.industryOptions = data.map(industry => {
+                return { label: industry, value: industry };
+            });
+            this.error = undefined;
+        } else if (error) {
+            this.error = error;
+            this.industryOptions = [];
+        }
+    }
+
+    // Wire the method to fetch locations based on selected industries
+    @wire(getCompanyLocations, { accountNameInitial: '', industries: '$selectedIndustries' })
+    wiredOfficeLocations({ error, data }) {
+        if (data) {
+            this.mapMarkers = data.map(dataItem => ({
+                location: {
+                    City: dataItem.BillingCity,
+                    Country: dataItem.BillingCountry,
+                },
+                icon: 'custom:custom26',
+                title: dataItem.Name,
+            }));
+            this.error = undefined;
+        } else if (error) {
+            this.error = error;
+            this.mapMarkers = [];
+        }
+    }
+
+    // Handle input change for the industry from the combobox
+    handleIndustryChange(event) {
+        this.industryName = event.target.value;
+    }
+
+    // Add the selected industry to the list if it's not already there
+    addIndustry() {
+        if (this.industryName && !this.selectedIndustries.includes(this.industryName)) {
+            this.selectedIndustries = [...this.selectedIndustries, this.industryName];
+        }
+    }
+
+    // Remove the last added industry
+    removeIndustry() {
+        if (this.selectedIndustries.length > 1) {
+            this.selectedIndustries = this.selectedIndustries.slice(0, -1);
+        }
+    }
+}
+
+//CSS
+.map-container {
+    height: 700px;
+}
+
+lightning-map {
+    width: 100%;
+    height: 100%;
+}
+
+//XML
+
+<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>61.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__AppPage</target>
+        <target>lightning__HomePage</target>
+        <target>lightning__RecordPage</target>
+    </targets>
+</LightningComponentBundle>
