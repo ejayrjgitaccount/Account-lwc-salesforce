@@ -1,3 +1,32 @@
+//APEX CLASS
+public with sharing class GoogleMapController {
+    @AuraEnabled(cacheable=true)
+    public static List<Account> getCompanyLocations(String accountNameInitial, List<String> industries) {
+        String str = (accountNameInitial != null && accountNameInitial != '') ? accountNameInitial + '%' : '%';
+        
+        // If no industries are selected, fetch all accounts without filtering by Industry
+        String industryFilter = (industries != null && !industries.isEmpty()) ? ' AND Industry IN :industries' : '';
+        
+        String query = 'SELECT Id, Name, BillingStreet, BillingState, BillingPostalCode, BillingCity, BillingCountry ' +
+                    'FROM Account WHERE Name LIKE :str' + industryFilter;
+                    
+        return Database.query(query);
+    }
+
+    // Fetch distinct industries
+    @AuraEnabled(cacheable=true)
+    public static List<String> getIndustries() {
+        List<Account> accounts = [SELECT  Industry FROM Account WHERE Industry != NULL ORDER BY Industry];
+        List<String> industries = new List<String>();
+        
+        // Extract the distinct Industry field from the Account object
+        for (Account acc : accounts) {
+            industries.add(acc.Industry);
+        }
+        return industries;
+    }
+}
+
 //HTML
 
 <template>
