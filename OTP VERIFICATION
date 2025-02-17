@@ -1,0 +1,185 @@
+/// otp genarator 
+public class OTPGenerator {
+   public static Integer generateOTP() {
+        return (Integer) (Math.random() * 900000) + 100000;
+    }
+}
+<?xml version="1.0" encoding="UTF-8"?>
+<ApexClass xmlns="http://soap.sforce.com/2006/04/metadata">
+    <apiVersion>63.0</apiVersion>
+    <status>Active</status>
+</ApexClass>              
+/// otp genarator
+
+///queueable apex class note:basic field artitruchure need to figure out BASED ON USER QUERY
+public class OTPQueueable implements Queueable, Database.AllowsCallouts {
+
+    private String customerEmail;
+
+    public OTPQueueable(String email) {
+        this.customerEmail = email;
+    }
+
+    public void execute(QueueableContext context) {
+        // Generate OTP
+        Integer otp = OTPGenerator.generateOTP();
+        DateTime expiryTime = DateTime.now().addMinutes(10); // OTP expires in 10 mins
+
+        // Store OTP in Salesforce
+        OTP_Verification__c otpRecord = new OTP_Verification__c(
+            Customer_Email__c = customerEmail,
+            OTP_Code__c = otp,
+            Expiry_Time__c = expiryTime,
+            Verified__c = false
+        );
+        insert otpRecord;
+
+        // Send Email
+        Messaging.SingleEmailMessage email = new Messaging.SingleEmailMessage();
+        email.setToAddresses(new List<String>{customerEmail});
+        email.setSubject('Your OTP Code');
+        email.setPlainTextBody('Your OTP is: ' + otp + '. It will expire in 10 minutes.');
+
+        Messaging.sendEmail(new List<Messaging.SingleEmailMessage>{email});
+
+        System.debug('OTP Sent Successfully to ' + customerEmail);
+    }
+}
+///queueable apex class note:basic field artitruchure need to figure out BASED ON USER QUERY
+
+////HANDLER CLASS
+public with sharing class OTPHandler {
+
+    @AuraEnabled
+    public static void generateOTP(String email) {
+        System.enqueueJob(new OTPQueueable(email));
+    }
+
+    @AuraEnabled
+    public static Boolean verifyOTP(String email, Integer enteredOTP) {
+        OTP_Verification__c otpRecord;
+        try {
+            otpRecord = [
+                SELECT Id, OTP_Code__c, Expiry_Time__c, Verified__c 
+                FROM OTP_Verification__c
+                WHERE Customer_Email__c = :email
+                AND Verified__c = false
+                ORDER BY CreatedDate DESC
+                LIMIT 1
+            ];
+        } catch (Exception e) {
+            return false;
+        }
+
+        if (otpRecord == null || otpRecord.Expiry_Time__c < DateTime.now()) {
+            return false;
+        }
+
+        if (otpRecord.OTP_Code__c == enteredOTP) {
+            otpRecord.Verified__c = true;
+            update otpRecord;
+            return true;
+        }
+
+        return false;
+    }
+}
+////HANDLER CLASS
+public with sharing class OTPHandler {
+
+    @AuraEnabled
+    public static void generateOTP(String email) {
+        System.enqueueJob(new OTPQueueable(email));
+    }
+
+    @AuraEnabled
+    public static Boolean verifyOTP(String email, Integer enteredOTP) {
+        OTP_Verification__c otpRecord;
+        try {
+            otpRecord = [
+                SELECT Id, OTP_Code__c, Expiry_Time__c, Verified__c 
+                FROM OTP_Verification__c
+                WHERE Customer_Email__c = :email
+                AND Verified__c = false
+                ORDER BY CreatedDate DESC
+                LIMIT 1
+            ];
+        } catch (Exception e) {
+            return false;
+        }
+
+        if (otpRecord == null || otpRecord.Expiry_Time__c < DateTime.now()) {
+            return false;
+        }
+
+        if (otpRecord.OTP_Code__c == enteredOTP) {
+            otpRecord.Verified__c = true;
+            update otpRecord;
+            return true;
+        }
+
+        return false;
+    }
+}
+////HANDLER
+
+/////LWC
+<template>
+    <lightning-card title="OTP Verification" icon-name="utility:lock">
+        <div class="slds-m-around_medium">
+            <template if:false={otpGenerated}>
+                <lightning-input label="Enter Your Email" type="email" value={email} onchange={handleEmailChange}></lightning-input>
+                <lightning-button label="Generate OTP" variant="brand" onclick={generateOTP} class="slds-m-top_medium"></lightning-button>
+            </template>
+
+            <template if:true={otpGenerated}>
+                <p>An OTP has been sent to your email.</p>
+                <lightning-input label="Enter OTP" type="number" value={otp} onchange={handleOTPChange}></lightning-input>
+                <lightning-button label="Verify OTP" variant="success" onclick={verifyOTP} class="slds-m-top_medium"></lightning-button>
+            </template>
+
+            <template if:true={verificationMessage}>
+                <p class="slds-text-color_success">{verificationMessage}</p>
+            </template>
+        </div>
+    </lightning-card>
+</template>
+import { LightningElement, track } from 'lwc';
+import generateOTP from '@salesforce/apex/OTPHandler.generateOTP';
+import verifyOTP from '@salesforce/apex/OTPHandler.verifyOTP';
+
+export default class OtpVerification extends LightningElement {
+    @track email = '';
+    @track otp = '';
+    @track otpGenerated = false;
+    @track verificationMessage = '';
+
+    handleEmailChange(event) {
+        this.email = event.target.value;
+    }
+
+    handleOTPChange(event) {
+        this.otp = event.target.value;
+    }
+
+    generateOTP() {
+        generateOTP({ email: this.email })
+            .then(() => {
+                this.otpGenerated = true;
+            })
+            .catch(error => {
+                console.error('Error generating OTP', error);
+            });
+    }
+
+    verifyOTP() {
+        verifyOTP({ email: this.email, enteredOTP: this.otp })
+            .then(result => {
+                this.verificationMessage = result ? 'OTP Verified Successfully!' : 'Invalid OTP or Expired!';
+            })
+            .catch(error => {
+                console.error('Error verifying OTP', error);
+            });
+    }
+}
+///LWC
